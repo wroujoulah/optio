@@ -87,18 +87,21 @@ export async function pooledAgentEnv(
     env.OPENAI_BASE_URL = env.OPTIO_OPENCODE_BASE_URL;
     env.OPENAI_API_KEY ||= OPENCODE_PLACEHOLDER_KEY;
   }
-  if (agent.agentRuntime !== "pi" && claudeAuthMode === "api-key") {
+  // CLAUDE_AUTH_MODE is the deployment's Claude Code sign-in. Cursor, Codex,
+  // and the other runtimes have their own credentials and must not fail
+  // because that Claude token is missing.
+  if (agent.agentRuntime === "claude-code" && claudeAuthMode === "api-key") {
     const apiKey = await secret("ANTHROPIC_API_KEY");
     if (apiKey) env.ANTHROPIC_API_KEY = apiKey;
   }
-  if (agent.agentRuntime !== "pi" && claudeAuthMode === "oauth-token") {
+  if (agent.agentRuntime === "claude-code" && claudeAuthMode === "oauth-token") {
     const oauthToken = await secret("CLAUDE_CODE_OAUTH_TOKEN");
     if (!oauthToken) {
       throw new Error("OAuth token mode selected but no CLAUDE_CODE_OAUTH_TOKEN secret found");
     }
     env.CLAUDE_CODE_OAUTH_TOKEN = oauthToken;
   }
-  if (agent.agentRuntime !== "pi" && claudeAuthMode === "max-subscription") {
+  if (agent.agentRuntime === "claude-code" && claudeAuthMode === "max-subscription") {
     const { getClaudeAuthToken } = await import("./auth-service.js");
     const authResult = getClaudeAuthToken();
     if (!authResult.available || !authResult.token) {
