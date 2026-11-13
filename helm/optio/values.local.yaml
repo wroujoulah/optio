@@ -53,3 +53,6 @@ auth:
 postgresql:
   auth:
     password: optio_dev
+
+# --- Don't create the namespace ---
+createNamespace: false
