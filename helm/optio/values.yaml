@@ -278,6 +278,11 @@ outbound:
   allowPrivate: false
   allowedHosts: []   # e.g. ["*.svc.cluster.local", "vault.internal", "10.1.0.0/16"]
 
+# Hosts besides gitlab.com that Optio treats as GitLab and may send a GitLab
+# token to (GITLAB_HOSTS). A private address still needs outbound.allowedHosts.
+git:
+  gitlabHosts: []   # e.g. ["gitlab.example.com"]
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Network Policy
 # Default-deny policy for every agent pod Optio starts (repo pods, Job pods,

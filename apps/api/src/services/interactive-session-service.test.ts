@@ -47,6 +47,10 @@ vi.mock("./repo-pool-service.js", () => ({
   getOrCreateRepoPod: vi.fn(),
 }));
 
+vi.mock("./repo-service.js", () => ({
+  getRepoByUrl: vi.fn(),
+}));
+
 vi.mock("../logger.js", () => ({
   logger: {
     info: vi.fn(),
@@ -69,6 +73,7 @@ vi.mock("./credential-secret-service.js", () => ({
 import { db } from "../db/client.js";
 import { publishEvent, publishSessionEvent } from "./event-bus.js";
 import { getOrCreateRepoPod } from "./repo-pool-service.js";
+import { getRepoByUrl } from "./repo-service.js";
 import { getPod } from "./agent-pod-pool.js";
 import {
   createSession,
@@ -92,24 +97,17 @@ describe("interactive-session-service", () => {
 
   describe("createSession", () => {
     it("creates a session with repo pod", async () => {
-      // Mock repo config lookup
-      (db.select as any) = vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([
-            {
-              defaultBranch: "main",
-              imagePreset: "node",
-              maxAgentsPerPod: 2,
-              maxPodInstances: 1,
-              networkPolicy: "unrestricted",
-              cpuRequest: null,
-              cpuLimit: null,
-              memoryRequest: null,
-              memoryLimit: null,
-            },
-          ]),
-        }),
-      });
+      vi.mocked(getRepoByUrl).mockResolvedValue({
+        defaultBranch: "main",
+        imagePreset: "node",
+        maxAgentsPerPod: 2,
+        maxPodInstances: 1,
+        networkPolicy: "unrestricted",
+        cpuRequest: null,
+        cpuLimit: null,
+        memoryRequest: null,
+        memoryLimit: null,
+      } as any);
 
       vi.mocked(getOrCreateRepoPod).mockResolvedValue({
         id: "pod-1",
@@ -141,11 +139,7 @@ describe("interactive-session-service", () => {
     });
 
     it("uses default branch when no repo config", async () => {
-      (db.select as any) = vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([]),
-        }),
-      });
+      vi.mocked(getRepoByUrl).mockResolvedValue(null);
 
       vi.mocked(getOrCreateRepoPod).mockResolvedValue({
         id: "pod-1",
@@ -171,12 +165,48 @@ describe("interactive-session-service", () => {
       );
     });
 
-    it("includes git credential env vars in pod env", async () => {
-      (db.select as any) = vi.fn().mockReturnValue({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([]),
+    it("clones the Default workspace branch when the session has no workspace", async () => {
+      vi.mocked(getRepoByUrl).mockResolvedValue({
+        defaultBranch: "master",
+        workspaceId: "default-ws",
+        imagePreset: "base",
+        maxAgentsPerPod: 2,
+        maxPodInstances: 1,
+        networkPolicy: "unrestricted",
+      } as any);
+
+      vi.mocked(getOrCreateRepoPod).mockResolvedValue({
+        id: "pod-1",
+        podName: "pod-1",
+      } as any);
+
+      (db.insert as any) = vi.fn().mockReturnValue({
+        values: vi.fn().mockReturnValue({
+          returning: vi
+            .fn()
+            .mockResolvedValue([{ id: "session-1", state: "active", podId: "pod-1" }]),
         }),
       });
+
+      await createSession({
+        repoUrl: "https://gitlab.example.com/theplayground/merchantfinder",
+      });
+
+      expect(getRepoByUrl).toHaveBeenCalledWith(
+        "https://gitlab.example.com/theplayground/merchantfinder",
+        undefined,
+      );
+      expect(getOrCreateRepoPod).toHaveBeenCalledWith(
+        "https://gitlab.example.com/theplayground/merchantfinder",
+        "master",
+        expect.objectContaining({ OPTIO_REPO_BRANCH: "master" }),
+        expect.objectContaining({ preset: "base" }),
+        expect.objectContaining({ workspaceId: "default-ws" }),
+      );
+    });
+
+    it("includes git credential env vars in pod env", async () => {
+      vi.mocked(getRepoByUrl).mockResolvedValue(null);
 
       vi.mocked(getOrCreateRepoPod).mockResolvedValue({
         id: "pod-1",

@@ -56,3 +56,14 @@ postgresql:
 
 # --- Don't create the namespace ---
 createNamespace: false
+
+# Hatch GitLab resolves to a private address. Listing the hostname lets the
+# API call it. Other private addresses stay blocked.
+outbound:
+  allowedHosts:
+    - gitlab.example.com
+
+# Credentials are sent only to gitlab.com and hosts named here.
+git:
+  gitlabHosts:
+    - gitlab.example.com

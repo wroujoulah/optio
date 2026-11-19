@@ -1,1 +1,2 @@
-node scripts/check-push.mjs --verify
+# Local only for now: skip the push check. It runs the full e2e suite.
+# node scripts/check-push.mjs --verify

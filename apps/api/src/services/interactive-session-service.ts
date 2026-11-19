@@ -7,8 +7,8 @@ import {
   sessionPrs,
   sessionChatEvents,
   sessionChatTurns,
-  repos,
 } from "../db/schema.js";
+import { getRepoByUrl } from "./repo-service.js";
 import { publishEvent, publishSessionEvent } from "./event-bus.js";
 import {
   InteractiveSessionState,
@@ -71,17 +71,11 @@ export async function createSession(input: {
   }
   if (!repoUrl) throw new Error("A terminal session needs a repository");
 
-  // Look up repo config for branch and image settings
-  const [repoConfig] = await db
-    .select()
-    .from(repos)
-    .where(
-      and(
-        eq(repos.repoUrl, repoUrl),
-        input.workspaceId ? eq(repos.workspaceId, input.workspaceId) : isNull(repos.workspaceId),
-      ),
-    );
-  const repoBranch = repoConfig?.defaultBranch ?? "main";
+  // A session with no workspace still belongs to the Default workspace's repo.
+  // Matching only a null workspace_id misses that row and clones "main" (#643).
+  const repoConfig = await getRepoByUrl(repoUrl, input.workspaceId);
+  const repoBranch = repoConfig?.defaultBranch?.trim() || "main";
+  const workspaceId = input.workspaceId ?? repoConfig?.workspaceId ?? null;
 
   // Get or create a repo pod for this session
   const env: Record<string, string> = {
@@ -91,7 +85,7 @@ export async function createSession(input: {
 
   const { applyGitAccess } = await import("./git-access-env.js");
   await applyGitAccess(env, {
-    workspaceId: input.workspaceId ?? null,
+    workspaceId,
     ownerUserId: input.userId,
     repoUrl,
   });
@@ -100,7 +94,7 @@ export async function createSession(input: {
     ? { preset: (repoConfig.imagePreset ?? "base") as PresetImageId }
     : undefined;
   const pod = await getOrCreateRepoPod(repoUrl, repoBranch, env, imageConfig, {
-    workspaceId: input.workspaceId,
+    workspaceId,
     ownerUserId: input.userId,
     isolationPurpose: `session:${sessionId}`,
     maxAgentsPerPod: repoConfig?.maxAgentsPerPod ?? 2,
@@ -130,7 +124,7 @@ export async function createSession(input: {
       title: input.title?.trim() || null,
       state: "active",
       podId: pod.id,
-      workspaceId: input.workspaceId ?? null,
+      workspaceId,
     })
     .returning();
 
